@@ -17,11 +17,12 @@ def _permutate_image_pixels(image, permutation):
     return image
 
 
-def _get_transform(mean, std, noise, permutation):
+def _get_transform(mean, std, normalize, noise, permutation):
     transform = [
         transforms.ToTensor(),
-        transforms.Normalize(mean, std),
     ]
+    if normalize:
+        transform.append(transforms.Normalize(mean, std))
     if permutation:
         transform.append(transforms.Lambda(
             lambda x: _permutate_image_pixels(x, permutation)))
@@ -36,11 +37,12 @@ def get_dataloader(data, targets, batchsize, shuffle=False):
                       shuffle=shuffle, num_workers=1)
 
 
-def get_loader(dataset, batch_size, train=True,
+def get_loader(dataset, batch_size, train=True, normalize=True,
                shuffle=True, noise=False, permutation=False):
     kwargs = {}
     if dataset == 'mnist':
-        transform = _get_transform((0.1307,), (0.3081,), noise, permutation)
+        transform = _get_transform((0.1307,), (0.3081,),
+                                   normalize, noise, permutation)
         loader = torch.utils.data.DataLoader(
             datasets.MNIST(cfg.data_dir, train=train,
                            download=cfg.download,
@@ -49,14 +51,15 @@ def get_loader(dataset, batch_size, train=True,
     elif dataset == 'cifar':
         transform = _get_transform(
             (0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010),
-            noise, permutation)
+            normalize, noise, permutation)
         loader = torch.utils.data.DataLoader(
             datasets.CIFAR10(cfg.data_dir, train=train,
                              download=cfg.download,
                              transform=transforms.Compose(transform)),
             batch_size=batch_size, shuffle=shuffle, **kwargs)
     elif dataset == 'fmnist':
-        transform = _get_transform((0.2861,), (0.3530,), noise, permutation)
+        transform = _get_transform((0.2861,), (0.3530,),
+                                   normalize, noise, permutation)
         loader = torch.utils.data.DataLoader(
             datasets.FashionMNIST(cfg.data_dir, train=train,
                                   download=cfg.download,

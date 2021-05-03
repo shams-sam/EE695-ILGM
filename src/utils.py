@@ -1,8 +1,15 @@
 from collections import OrderedDict
 from functools import partial
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+def binary_loss(x_tilde, x):
+    return nn.CrossEntropyLoss(x_tilde, x, reduction='none').sum(dim=0)
 
 
 def draw_weights(model_mu, model_var, device):
@@ -21,10 +28,24 @@ def init_model(model, mean=0.0, std=0.0, init='normal'):
     elif init == 'uniform':
         initializer = partial(torch.nn.init.uniform_, b=0.001)
     elif init == 'orthogonal':
-        initializer = torch.nn.init.orthogonal_
+        initializer = torch.nn.init.orthogonal
 
     for param in model.parameters():
         initializer(param)
+
+
+def multinomial_loss(x_logit, x, num_classes):
+    batch_size = x.shape[0]
+    # Reshape input
+    x_logit = x_logit.view(batch_size, num_classes,
+                           x.shape[1], x.shape[2], x.shape[3])
+    # Take softmax
+    x_logit = F.log_softmax(x_logit, 1)
+    # make integer class labels
+    target = (x * (num_classes - 1)).long()
+    # computes cross entropy over all dimensions separately:
+    ce = F.nll_loss(x_logit, target, weight=None, reduction='none')
+    return ce.sum(dim=0)*100
 
 
 def num_layers(model):
@@ -80,6 +101,30 @@ def plot_training(epoch, acc, loss):
     ax2.grid('on')
 
     plt.show()
+
+
+def plot_batch(batch, nslices=8):
+    # Create one big image for plot
+    img = np.zeros(((batch.shape[2] + 1) * nslices,
+                    (batch.shape[3] + 1) * nslices))
+    for b in range(batch.shape[0]):
+        row = int(b / nslices); col = int(b % nslices)
+        r_p = row * batch.shape[2] + row; c_p = col * batch.shape[3] + col
+        img[
+            r_p:(r_p+batch.shape[2]),
+            c_p:(c_p+batch.shape[3])
+        ] = torch.sum(batch[b], 0)
+    im = plt.imshow(img, cmap='Greys', interpolation='nearest'),
+    return im
+
+def reconstruction_loss(x_tilde, x, num_classes=1, average=True):
+    if (num_classes == 1):
+        loss = binary_loss(x_tilde, x.view(x.size(0), -1))
+    else:
+        loss = multinomial_loss(x_tilde, x, num_classes)
+    if (average):
+        loss = loss.sum() / x.size(0)
+    return loss
 
 
 def sns_density(model, cols=4, bins=10):
